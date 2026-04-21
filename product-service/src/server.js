@@ -1,14 +1,14 @@
 const express = require("express");
 const axios = require("axios");
+const os = require("os");
 
 const app = express();
 
 const SERVICE_NAME = "product-service";
-const HOST = process.env.HOST || "product-service";
+const HOST = os.hostname(); 
 const PORT = process.env.PORT || 3001;
 const REGISTRY_URL = process.env.REGISTRY_URL || "http://service-registry:8500";
 
-// REGISTER SERVICE
 async function register() {
   try {
     await axios.post(`${REGISTRY_URL}/registry/register`, {
@@ -17,28 +17,36 @@ async function register() {
       port: PORT
     });
 
-    console.log("Product service registered");
-  } catch (err) {
-    console.log("Registry registration failed");
+    console.log("Product service registered:", HOST);
+
+  
+    startHeartbeat();
+
+  } catch (error) {
+    console.log("Registry registration failed, retrying...");
+    setTimeout(register, 5000);
   }
 }
 
-// HEARTBEAT
-async function heartbeat() {
-  try {
-    await axios.post(`${REGISTRY_URL}/registry/heartbeat`, {
-      serviceName: SERVICE_NAME,
-      host: HOST,
-      port: PORT
-    });
 
-    console.log("Heartbeat sent");
-  } catch (err) {
-    console.log("Heartbeat failed");
-  }
+function startHeartbeat() {
+  setInterval(async () => {
+    try {
+      await axios.post(`${REGISTRY_URL}/registry/heartbeat`, {
+        serviceName: SERVICE_NAME,
+        host: HOST,
+        port: PORT
+      });
+
+      console.log("Heartbeat sent:", HOST);
+
+    } catch (error) {
+      console.log("Heartbeat failed");
+    }
+  }, 10000);
 }
 
-// DEREGISTER
+
 async function deregister() {
   try {
     await axios.post(`${REGISTRY_URL}/registry/deregister`, {
@@ -47,26 +55,31 @@ async function deregister() {
       port: PORT
     });
 
-    console.log("Product service deregistered");
-  } catch (err) {}
+    console.log("Product service deregistered:", HOST);
+  } catch (error) {
+    console.log("Deregistration failed");
+  }
 }
 
-// SEND HEARTBEAT EVERY 10s
-setInterval(heartbeat, 10000);
 
-// GRACEFUL SHUTDOWN
 process.on("SIGTERM", async () => {
   console.log("Stopping product service...");
   await deregister();
-  process.exit();
+  process.exit(0);
 });
 
-// HEALTH CHECK
+process.on("SIGINT", async () => {
+  console.log("Interrupt received...");
+  await deregister();
+  process.exit(0);
+});
+
+
 app.get("/health", (req, res) => {
-  res.json({ status: "UP" });
+  res.status(200).json({ status: "UP" });
 });
 
-// PRODUCT API
+
 app.get("/products", (req, res) => {
   res.json([
     { id: 1, name: "Laptop" },
@@ -74,6 +87,7 @@ app.get("/products", (req, res) => {
     { id: 3, name: "Tablet" }
   ]);
 });
+
 
 app.listen(PORT, async () => {
   console.log(`Product service running on port ${PORT}`);

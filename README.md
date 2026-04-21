@@ -3,81 +3,88 @@
 ## **Project Overview**
 
 This project implements a **dynamic service discovery system** for a **cloud-native microservices architecture**.
-The system contains **four main components**:
+
+The system consists of **four core components**:
 
 * **Service Registry**
 * **API Gateway**
 * **Product Service**
 * **Pricing Service**
 
-Each microservice automatically **registers itself**, sends **heartbeat signals**, and **deregisters on shutdown**.
+Each microservice automatically:
 
-The **API Gateway** acts as the **single entry point** and dynamically routes requests to **healthy services**.
+* Registers itself on startup
+* Sends periodic **heartbeat signals**
+* Deregisters itself on shutdown
+
+The **API Gateway** acts as the **single entry point** and dynamically routes requests to **healthy service instances** using **client-side discovery**.
 
 ---
-## **Architecture Diagram**
 
-The following diagram shows how the **Service Registry**, **API Gateway**, **Product Service**, and **Pricing Service** interact.
+## **Architecture Diagram**
 
 ![Architecture Diagram](docs/architecture.png)
 
 ### **Flow Explanation**
 
-1. Client sends requests to the **API Gateway**
-2. The gateway queries the **Service Registry**
-3. The registry returns healthy service instances
-4. The gateway routes requests to **Product Service** or **Pricing Service**
-5. Services send **heartbeat signals every 10 seconds**
-6. If a service stops sending heartbeats for **30 seconds**, the registry removes it
+1. Client sends request to **API Gateway**
+2. Gateway queries the **Service Registry**
+3. Registry returns healthy instances
+4. Gateway routes request using **round-robin**
+5. Services send heartbeat every **10 seconds**
+6. Registry removes services after **30 seconds of inactivity**
+
 ---
+
 ## **Architecture Components**
 
 ### **Service Registry**
 
-The **Service Registry** maintains the list of all running services.
+Maintains the list of all active service instances.
 
-Responsibilities:
+**Responsibilities:**
 
-* **Register new service instances**
-* **Receive heartbeat signals**
-* **Remove inactive services automatically**
-* **Provide service discovery endpoints**
+* Register new service instances
+* Receive heartbeat signals
+* Remove inactive services automatically
+* Provide service discovery endpoints
 
 ---
 
 ### **Product Service**
 
-The **Product Service** provides product catalog data.
+Provides product catalog data.
 
-Features:
+**Features:**
 
-* Automatically **registers with the registry**
-* Sends **heartbeat signals every 10 seconds**
-* Provides **product API endpoints**
+* Auto-registers with registry
+* Sends heartbeat every 10 seconds
+* Provides `/products` API
 
 ---
 
 ### **Pricing Service**
 
-The **Pricing Service** provides pricing data for products.
+Provides pricing information.
 
-Features:
+**Features:**
 
-* Automatically **registers with the registry**
-* Sends **heartbeat signals**
-* Provides **pricing API endpoints**
+* Auto-registers with registry
+* Sends heartbeat
+* Provides `/pricing` API
 
 ---
 
 ### **API Gateway**
 
-The **API Gateway** acts as the **single entry point** for all external requests.
+Acts as the **single entry point** for all external requests.
 
-Responsibilities:
+**Responsibilities:**
 
 * Discover services dynamically
 * Route traffic to healthy instances
 * Perform **round-robin load balancing**
+* Cache service instances
 
 ---
 
@@ -86,30 +93,10 @@ Responsibilities:
 ```
 dynamic-service-registry
 │
-├── service-registry
-│   ├── Dockerfile
-│   ├── package.json
-│   └── src
-│       └── server.js
-│
-├── product-service
-│   ├── Dockerfile
-│   ├── package.json
-│   └── src
-│       └── server.js
-│
-├── pricing-service
-│   ├── Dockerfile
-│   ├── package.json
-│   └── src
-│       └── server.js
-│
-├── api-gateway
-│   ├── Dockerfile
-│   ├── package.json
-│   └── src
-│       └── server.js
-│
+├── service-registry/
+├── product-service/
+├── pricing-service/
+├── api-gateway/
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -119,12 +106,12 @@ dynamic-service-registry
 
 ## **Technologies Used**
 
-* **Node.js**
-* **Express.js**
-* **Docker**
-* **Docker Compose**
-* **REST APIs**
-* **Microservices Architecture**
+* Node.js
+* Express.js
+* Docker
+* Docker Compose
+* REST APIs
+* Microservices Architecture
 
 ---
 
@@ -132,262 +119,212 @@ dynamic-service-registry
 
 ### **Automatic Service Registration**
 
-When a service starts, it automatically **registers itself** with the **Service Registry**.
+Services register themselves on startup.
 
 ---
 
 ### **Heartbeat Monitoring**
 
-Each service sends a **heartbeat request every 10 seconds** to indicate it is still alive.
+Services send heartbeat every **10 seconds**.
 
 ---
 
-### **Automatic Service Cleanup**
+### **Automatic Cleanup**
 
-If a service fails to send a heartbeat for **30 seconds**, it is automatically removed from the registry.
+Registry removes services inactive for **30 seconds**.
 
 ---
 
 ### **Graceful Deregistration**
 
-When a service stops, it **deregisters itself** before exiting.
+Services deregister before shutdown (SIGTERM / SIGINT).
 
 ---
 
 ### **Dynamic Service Discovery**
 
-The **API Gateway queries the Service Registry** to discover available services.
+Gateway fetches available services dynamically.
 
 ---
 
 ### **Load Balancing**
 
-The gateway distributes requests across instances using **round-robin load balancing**.
+Round-robin distribution across instances.
 
 ---
 
 ### **Docker Containerization**
 
-All services run in **Docker containers** and are orchestrated using **Docker Compose**.
+All services are containerized and orchestrated.
+
+---
+
+## **Health Checks**
+
+Each service exposes a health endpoint:
+
+* Registry → `http://localhost:8500/health`
+* Product → `http://localhost:3001/health`
+* Pricing → `http://localhost:3002/health`
+* Gateway → `http://localhost:8080/health`
+
+These are used by Docker to verify service readiness.
+
+---
+
+## **API Gateway Caching**
+
+The API Gateway **caches service instances** and refreshes them every **30 seconds**.
+
+Benefits:
+
+* Reduces load on registry
+* Improves resilience
+* Prevents single point of failure
+
+---
+
+## **Graceful Shutdown**
+
+Each service listens for:
+
+* `SIGTERM`
+* `SIGINT`
+
+Before shutdown, it:
+
+1. Sends deregistration request
+2. Stops accepting traffic
 
 ---
 
 ## **Running the Application**
 
-### **Step 1 — Build and Start Services**
+### **Start All Services**
 
-Run the following command from the project root:
-
-```
+```bash
 docker-compose up --build
 ```
 
-This command starts:
+---
 
-* **Service Registry → Port 8500**
-* **Product Service → Port 3001**
-* **Pricing Service → Port 3002**
-* **API Gateway → Port 8080**
+### **Verify Running Containers**
+
+```bash
+docker-compose ps
+```
 
 ---
 
 ## **API Endpoints**
 
-### **Service Registry APIs**
+### **Service Registry**
 
-#### **Register Service**
-
-POST
-
-```
-http://localhost:8500/registry/register
-```
-
-Body:
-
-```
-{
- "serviceName": "test-service",
- "host": "10.0.0.5",
- "port": 3000
-}
-```
+* Register → `POST /registry/register`
+* Heartbeat → `POST /registry/heartbeat`
+* Deregister → `POST /registry/deregister`
+* Discover → `GET /registry/services/:serviceName`
 
 ---
 
-#### **Heartbeat**
+### **Product Service**
 
-POST
-
-```
-http://localhost:8500/registry/heartbeat
-```
+* Health → `/health`
+* Products → `/products`
 
 ---
 
-#### **Deregister Service**
+### **Pricing Service**
 
-POST
-
-```
-http://localhost:8500/registry/deregister
-```
+* Health → `/health`
+* Pricing → `/pricing`
 
 ---
 
-#### **Discover Services**
+### **API Gateway**
 
-GET
-
-```
-http://localhost:8500/registry/services/product-service
-```
-
----
-
-### **Product Service APIs**
-
-Health Check
-
-```
-http://localhost:3001/health
-```
-
-Products API
-
-```
-http://localhost:3001/products
-```
-
----
-
-### **Pricing Service APIs**
-
-Health Check
-
-```
-http://localhost:3002/health
-```
-
-Pricing API
-
-```
-http://localhost:3002/pricing
-```
-
----
-
-### **API Gateway APIs**
-
-Products via Gateway
-
-```
-http://localhost:8080/api/products
-```
-
-Pricing via Gateway
-
-```
-http://localhost:8080/api/pricing
-```
+* Products → `/api/products`
+* Pricing → `/api/pricing`
 
 ---
 
 ## **Scaling Services**
 
-The architecture supports **horizontal scaling**.
-
-Example:
-
-```
+```bash
 docker-compose up --scale product-service=3
 ```
 
-This launches **three instances** of the product service.
+This launches multiple instances.
 
-The **API Gateway automatically balances requests** between instances.
+Gateway automatically balances traffic.
 
 ---
 
 ## **Failover Testing**
 
-To simulate service failure:
-
-```
+```bash
 docker ps
-```
-
-Find a product service container ID.
-
-Stop it:
-
-```
 docker stop <container_id>
 ```
 
-After about **30 seconds**, the registry removes the failed instance and the gateway continues routing traffic to healthy instances.
+After ~30 seconds:
+
+* Registry removes failed instance
+* Gateway routes to remaining services
 
 ---
 
-## **Verification Steps**
+## **Quick Test Commands**
 
-### **Start the system**
+```bash
+# Gateway test
+curl http://localhost:8080/api/products
 
-```
-docker-compose up
-```
+# Registry test
+curl http://localhost:8500/registry/services/product-service
 
-### **Verify containers**
+# Scaling
+docker-compose up --scale product-service=3
 
-```
-docker-compose ps
-```
-
-### **Check service discovery**
-
-```
-http://localhost:8500/registry/services/product-service
-```
-
-### **Test API Gateway**
-
-```
-http://localhost:8080/api/products
-```
-
-```
-http://localhost:8080/api/pricing
+# Failover
+docker stop <container_id>
 ```
 
 ---
 
 ## **Environment Variables**
 
-Example `.env.example`
+`.env.example`
 
 ```
 REGISTRY_URL=http://service-registry:8500
-PORT=3000
-HOST=service-name
+PORT=3001
 ```
 
 ---
 
 ## **Key Concepts Demonstrated**
 
-* **Microservices Architecture**
-* **Service Discovery**
-* **API Gateway Pattern**
-* **Health Monitoring**
-* **Distributed Systems Communication**
-* **Docker Containerization**
-* **Fault Tolerance**
-* **Load Balancing**
+* Microservices Architecture
+* Service Discovery
+* API Gateway Pattern
+* Health Monitoring
+* Distributed Systems
+* Load Balancing
+* Fault Tolerance
+* Docker Orchestration
 
 ---
 
 ## **Conclusion**
 
-This project demonstrates how to build a **cloud-native microservices system with dynamic service discovery and health-based routing**.
+This project demonstrates a **dynamic service discovery system** with:
 
-The architecture automatically adapts to **service failures, scaling events, and dynamic cloud environments**, making it suitable for modern **distributed cloud platforms**.
+* Automatic registration
+* Health-based routing
+* Fault tolerance
+* Horizontal scalability
+
+This implementation follows the **client-side service discovery pattern similar to Netflix Eureka** and is suitable for modern cloud-native environments.
+
+---

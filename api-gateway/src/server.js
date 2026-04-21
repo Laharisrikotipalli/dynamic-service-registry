@@ -2,29 +2,57 @@ const express = require("express");
 const axios = require("axios");
 
 const app = express();
-const REGISTRY_URL = "http://service-registry:8500";
+const REGISTRY_URL = process.env.REGISTRY_URL || "http://service-registry:8500";
 
-let index = 0;
 
-async function discover(serviceName) {
-  const response = await axios.get(
-    `${REGISTRY_URL}/registry/services/${serviceName}`
-  );
+let cache = {
+  "product-service": [],
+  "pricing-service": []
+};
 
-  const services = response.data;
 
-  if (!services.length)
-    throw new Error(`No instances found for ${serviceName}`);
+let indexMap = {
+  "product-service": 0,
+  "pricing-service": 0
+};
 
-  const service = services[index % services.length];
-  index++;
 
-  return service;
+async function refreshCache() {
+  try {
+    const productRes = await axios.get(`${REGISTRY_URL}/registry/services/product-service`);
+    const pricingRes = await axios.get(`${REGISTRY_URL}/registry/services/pricing-service`);
+
+    cache["product-service"] = productRes.data;
+    cache["pricing-service"] = pricingRes.data;
+
+    console.log("Cache updated");
+  } catch (err) {
+    console.log("Registry unavailable, using old cache");
+  }
 }
+
+
+refreshCache();
+setInterval(refreshCache, 30000);
+
+
+function discover(serviceName) {
+  const services = cache[serviceName];
+
+  if (!services || services.length === 0) {
+    throw new Error(`No instances found for ${serviceName}`);
+  }
+
+  const idx = indexMap[serviceName] % services.length;
+  indexMap[serviceName]++;
+
+  return services[idx];
+}
+
 
 app.get("/api/products", async (req, res) => {
   try {
-    const service = await discover("product-service");
+    const service = discover("product-service");
 
     const response = await axios.get(
       `http://${service.host}:${service.port}/products`
@@ -40,9 +68,10 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
+
 app.get("/api/pricing", async (req, res) => {
   try {
-    const service = await discover("pricing-service");
+    const service = discover("pricing-service");
 
     const response = await axios.get(
       `http://${service.host}:${service.port}/pricing`
@@ -56,6 +85,11 @@ app.get("/api/pricing", async (req, res) => {
       details: err.message
     });
   }
+});
+
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "UP" });
 });
 
 app.listen(8080, () =>
